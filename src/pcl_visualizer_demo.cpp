@@ -44,7 +44,7 @@ void viewKeyboardCallback(const pcl::visualization::KeyboardEvent &event, void* 
     }
 }
 
-void veloCircleView(std::vector<std::string>& scan_paths) {
+void lidarViewer(std::vector<std::string>& scan_paths) {
      pcl::visualization::PCLVisualizer::Ptr viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
      viewer->setBackgroundColor (0, 0, 0);
      viewer->addCoordinateSystem (1.0, "axes");
@@ -66,7 +66,7 @@ void veloCircleView(std::vector<std::string>& scan_paths) {
 
         viewer->spinOnce(500);
         //boost::this_thread::sleep(boost::posix_time::milliseconds(50));
-        std::this_thread::sleep_for(50ms);
+        std::this_thread::sleep_for(10ms);
 
         if (g_viewer_stopped) {
             LOG(INFO) << "user input skipping rest frames";
@@ -75,14 +75,46 @@ void veloCircleView(std::vector<std::string>& scan_paths) {
     }
 }
 
+pcl::visualization::PCLVisualizer::Ptr customColourVis (pcl::PointCloud<pcl::PointXYZI>::ConstPtr cloud)
+{
+  // --------------------------------------------
+  // -----Open 3D viewer and add point cloud-----
+  // --------------------------------------------
+  pcl::visualization::PCLVisualizer::Ptr viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
+  viewer->setBackgroundColor (0, 0, 0);
+  pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZI> single_color(cloud, 0, 255, 0);
+  viewer->addPointCloud<pcl::PointXYZI> (cloud, single_color, "sample cloud");
+  viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "sample cloud");
+  viewer->addCoordinateSystem (1.0);
+
+  return (viewer);
+}
+
 int main (int argc, char** argv)
 {
     google::ParseCommandLineFlags(&argc, &argv, true);
  
     std::vector<std::string> scan_paths;
     split(FLAGS_scan_paths, ' ', std::back_inserter(scan_paths));
-    CHECK(!scan_paths.empty()) << "at least one velo frame is needed";
-    veloCircleView(scan_paths);  
+    //CHECK(!scan_paths.empty()) << "at least one velo frame is needed";
 
-    return 0;
+    //lidarViewer(scan_paths);  
+
+    pcl::PointCloud<pcl::PointXYZI>::Ptr cloud1 (new pcl::PointCloud<pcl::PointXYZI>);
+
+    if (pcl::io::loadPCDFile<pcl::PointXYZI> ("/home/bryan/bags/validation/pandar_points_0001.pcd", *cloud1) == -1) {
+        PCL_ERROR ("Couldn't read file pandar_points.pcd \n");
+        return (-1);
+    }    
+    pcl::visualization::PCLVisualizer::Ptr viewer1;
+    viewer1 = customColourVis(cloud1);
+
+    while (!viewer1->wasStopped ()) {
+        viewer1->spinOnce (100);
+        std::this_thread::sleep_for(100ms);
+    }
+
+
+
+    //return 0;
 }
