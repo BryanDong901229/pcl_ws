@@ -21,6 +21,10 @@ using namespace std::chrono_literals;
 typedef pcl::PointXYZI Point;
 typedef pcl::PointCloud<Point> PointCloud;
 static std::shared_ptr<pcl::visualization::PCLVisualizer> _pcl_viewer;
+pcl::PointCloud<pcl::PointXYZI>::Ptr clicked_points_3d(new pcl::PointCloud<pcl::PointXYZI>);
+pcl::PointCloud<pcl::PointXYZI>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZI>);
+pcl::visualization::PCLVisualizer::Ptr viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
+int num = 0;
 
 static bool g_viewer_stopped = false;    // flag viewer stopped by user
 DEFINE_string(scan_paths, "", "pcd files, separated by space, in same order as image paths (required)");
@@ -90,6 +94,53 @@ pcl::visualization::PCLVisualizer::Ptr customColourVis (pcl::PointCloud<pcl::Poi
   return (viewer);
 }
 
+void pp_callback(const pcl::visualization::AreaPickingEvent& event, void* args)
+{
+
+    // pcl::PointIndices::Ptr inliers;
+    // inliers = pcl::PointIndices::Ptr(new pcl::PointIndices);
+    // if (event.getPointsIndices(inliers->indices) != false) {
+    // pcl::ExtractIndices<pcl::PointXYZI> extract;
+    // extract.setIndices(inliers);
+    // extract.setInputCloud(point_cloud_);
+    // extract.setNegative(false); //矩形框选中的点
+
+    // pcl::PointCloud<pcl::PointXYZI>::Ptr new_cloud_ = pcl::PointCloud<pcl::PointXYZI>::Ptr(new pcl::PointCloud<pcl::PointXYZI>);
+    // extract.filter(*new_cloud_);
+
+    // pcl::copyPointCloud(*new_cloud_, *point_cloud_);
+    // std::cout << "selected_cloud has " << point_cloud_->points.size() << " points." << std::endl;
+
+    //  viewer_->removeAllPointClouds();
+    // pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZI> handle(point_cloud_, 50, 100, 139);
+    // viewer_->addPointCloud(point_cloud_, handle);//显示矩形框选中的点云
+    // }
+
+	std::vector< int > indices;
+	if (event.getPointsIndices(indices) == -1)
+		return;
+	for (int i = 0; i < indices.size(); ++i)
+	{
+		clicked_points_3d->points.push_back(cloud->points.at(indices[i]));
+	}
+	clicked_points_3d->height = 1;
+	clicked_points_3d->width += indices.size();
+    LOG(INFO) << "Selected point could amount is " << indices.size()/2;
+	pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZI> red(clicked_points_3d, 255, 0, 0);
+	//每添加一次点云都要取一次别名，不然只能选择一次
+	std::stringstream ss;
+	std::string cloudName;
+	ss << num++;
+	ss >> cloudName;
+	cloudName += "_cloudName";
+	//添加点云，并设置其显示半径
+	viewer->addPointCloud(clicked_points_3d, red, cloudName);
+	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 5, cloudName);
+	// 保存点云
+	pcl::PCDWriter writer;
+	writer.write<pcl::PointXYZI>("plane.pcd", *clicked_points_3d);
+}
+
 int main (int argc, char** argv)
 {
     google::ParseCommandLineFlags(&argc, &argv, true);
@@ -97,20 +148,19 @@ int main (int argc, char** argv)
     std::vector<std::string> scan_paths;
     split(FLAGS_scan_paths, ' ', std::back_inserter(scan_paths));
     //CHECK(!scan_paths.empty()) << "at least one velo frame is needed";
-
     //lidarViewer(scan_paths);  
 
-    pcl::PointCloud<pcl::PointXYZI>::Ptr cloud1 (new pcl::PointCloud<pcl::PointXYZI>);
+    CHECK(-1 != pcl::io::loadPCDFile<pcl::PointXYZI> ("/home/bryan/bags/validation/pandar_points_0001.pcd", *cloud)) << "Couldn't read file pandar_points.pcd";
 
-    if (pcl::io::loadPCDFile<pcl::PointXYZI> ("/home/bryan/bags/validation/pandar_points_0001.pcd", *cloud1) == -1) {
-        PCL_ERROR ("Couldn't read file pandar_points.pcd \n");
-        return (-1);
-    }    
-    pcl::visualization::PCLVisualizer::Ptr viewer1;
-    viewer1 = customColourVis(cloud1);
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZI> single_color(cloud, 0, 255, 0);
+    viewer->addPointCloud<pcl::PointXYZI> (cloud, single_color, "sample cloud");
+    viewer->addCoordinateSystem (1.0);
 
-    while (!viewer1->wasStopped ()) {
-        viewer1->spinOnce (100);
+	clicked_points_3d->width = 0;//初始化点云个数
+    viewer->registerAreaPickingCallback(pp_callback, (void*)&cloud);
+
+    while (!viewer->wasStopped ()) {
+        viewer->spinOnce (100);
         std::this_thread::sleep_for(100ms);
     }
 
